@@ -1,0 +1,39 @@
+# Core PDFKG Dependencies
+faiss-cpu
+fuzzywuzzy
+google-generativeai
+mistralai
+networkx
+numpy
+orjson
+pandas
+pyarrow
+PyMuPDF
+pymilvus
+python-arango
+python-dotenv
+scikit-learn
+sentence-transformers
+torch
+
+# Flask Web Framework
+Flask==3.0.0
+Flask-CORS==4.0.0
+Flask-SocketIO==5.3.5
+
+# WebSocket Support
+python-socketio==5.10.0
+python-engineio==4.8.0
+
+# Session Management
+Flask-Session==0.5.0
+
+# Production WSGI Server
+gunicorn==21.2.0
+eventlet==0.33.3
+
+# Utilities
+Werkzeug==3.0.1
+
+# Optional: Gradio (for legacy app.py.gradio.backup)
+# gradio

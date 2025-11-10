@@ -1,0 +1,82 @@
+<div class="row">
+    <div class="col-md-3">
+        <h3><i class="fas fa-cog"></i> Configuration</h3>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">LLM Provider</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="aasxLlmProvider" id="aasxGemini" value="gemini" checked>
+                        <label class="form-check-label" for="aasxGemini">
+                            Gemini
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="aasxLlmProvider" id="aasxMistral" value="mistral">
+                        <label class="form-check-label" for="aasxMistral">
+                            Mistral
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Submodels</label>
+                    <div id="submodelCheckboxes">
+                        {% for display_name, key in submodel_choices %}
+                        <div class="form-check">
+                            <input class="form-check-input submodel-checkbox" type="checkbox" value="{{ key }}" id="submodel_{{ key }}">
+                            <label class="form-check-label" for="submodel_{{ key }}">
+                                {{ display_name }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="form-text">Select submodels to extract and include in the AAS file</div>
+                </div>
+
+                <button type="button" class="btn btn-primary w-100 mb-2" id="extractSubmodelsBtn">
+                    <i class="fas fa-brain"></i> Extract Selected Submodels
+                </button>
+
+                <button type="button" class="btn btn-success w-100" id="generateAasxBtn" disabled>
+                    <i class="fas fa-file-export"></i> Generate AASX
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-9">
+        <h3><i class="fas fa-file-code"></i> Submodel Data</h3>
+
+        <div class="card">
+            <div class="card-body">
+                <!-- Status -->
+                <div id="aasxStatus" class="alert alert-info">
+                    Select one or more submodels and click <strong>Extract</strong> to populate their templates.
+                </div>
+
+                <!-- Progress -->
+                <div id="aasxProgressContainer" class="mb-3" style="display: none;">
+                    <div class="progress">
+                        <div id="aasxProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
+                    </div>
+                    <div id="aasxProgressText" class="text-center mt-2"></div>
+                </div>
+
+                <!-- Download link -->
+                <div id="downloadContainer" class="alert alert-success" style="display: none;">
+                    <h5>✅ AAS File Generated!</h5>
+                    <a id="downloadLink" href="#" class="btn btn-success">
+                        <i class="fas fa-download"></i> Download AAS XML
+                    </a>
+                </div>
+
+                <!-- Submodel editors (will be populated dynamically) -->
+                <div id="submodelEditors" class="mt-3">
+                    <!-- Editors will be added here via JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

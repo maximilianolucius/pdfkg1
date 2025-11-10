@@ -1,0 +1,92 @@
+<div class="row">
+    <div class="col-md-3">
+        <h3><i class="fas fa-book"></i> Select PDF</h3>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="pdfSelector" class="form-label">PDF to Query</label>
+                    <select class="form-select" id="pdfSelector">
+                        <option value="">Select a PDF...</option>
+                        {% for pdf in pdf_list %}
+                        <option value="{{ pdf.slug }}">{{ pdf.filename }} ({{ pdf.num_chunks }} chunks)</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="button" class="btn btn-secondary btn-sm w-100" id="refreshPdfBtn">
+                    <i class="fas fa-sync"></i> Refresh List
+                </button>
+            </div>
+        </div>
+
+        <h3><i class="fas fa-cog"></i> Chat Options</h3>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">LLM Provider</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="llmProvider" id="llmNone" value="none">
+                        <label class="form-check-label" for="llmNone">
+                            No LLM (keyword only)
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="llmProvider" id="llmGemini" value="gemini" checked>
+                        <label class="form-check-label" for="llmGemini">
+                            Gemini
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="llmProvider" id="llmMistral" value="mistral">
+                        <label class="form-check-label" for="llmMistral">
+                            Mistral
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="topK" class="form-label">Number of Sources: <span id="topKValue">5</span></label>
+                    <input type="range" class="form-range" id="topK" min="1" max="10" step="1" value="5">
+                    <div class="form-text">More sources = more context</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-9">
+        <h3><i class="fas fa-comments"></i> Ask Questions</h3>
+
+        <div class="card mb-3" style="height: 600px;">
+            <div class="card-body d-flex flex-column">
+                <!-- Chat messages -->
+                <div id="chatMessages" class="flex-grow-1 overflow-auto mb-3">
+                    <div class="alert alert-info">
+                        <h5>💡 Example Questions:</h5>
+                        <ul>
+                            <li>What are the operative temperature limits?</li>
+                            <li>How do you mount this device?</li>
+                            <li>What certifications does this product have?</li>
+                            <li>What is the input voltage range?</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Chat input -->
+                <div class="input-group">
+                    <input type="text" class="form-control" id="chatInput" placeholder="Ask a question..." disabled>
+                    <button class="btn btn-primary" type="button" id="sendBtn" disabled>
+                        <i class="fas fa-paper-plane"></i> Send
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <button type="button" class="btn btn-secondary" id="clearChatBtn">
+                <i class="fas fa-trash"></i> Clear Chat History
+            </button>
+        </div>
+    </div>
+</div>

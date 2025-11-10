@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}PDFKG - Home{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4"><i class="fas fa-industry"></i> PDFKG - PDF Knowledge Graph & AAS System</h1>
+
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="ingest-tab" data-bs-toggle="tab" data-bs-target="#ingest" type="button">
+                    <i class="fas fa-upload"></i> PDF Ingestion
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="qa-tab" data-bs-toggle="tab" data-bs-target="#qa" type="button">
+                    <i class="fas fa-comments"></i> PDF Q&A
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="aasx-tab" data-bs-toggle="tab" data-bs-target="#aasx" type="button">
+                    <i class="fas fa-industry"></i> Generate AASX
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs" type="button">
+                    <i class="fas fa-list"></i> System Logs
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content mt-3" id="mainTabsContent">
+            <!-- PDF Ingestion Tab -->
+            <div class="tab-pane fade show active" id="ingest" role="tabpanel">
+                {% include 'tabs/ingest.html' %}
+            </div>
+
+            <!-- Q&A Tab -->
+            <div class="tab-pane fade" id="qa" role="tabpanel">
+                {% include 'tabs/qa.html' %}
+            </div>
+
+            <!-- AASX Tab -->
+            <div class="tab-pane fade" id="aasx" role="tabpanel">
+                {% include 'tabs/aasx.html' %}
+            </div>
+
+            <!-- Logs Tab -->
+            <div class="tab-pane fade" id="logs" role="tabpanel">
+                {% include 'tabs/logs.html' %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/ingest.js') }}"></script>
+<script src="{{ url_for('static', filename='js/qa.js') }}"></script>
+<script src="{{ url_for('static', filename='js/aasx.js') }}"></script>
+<script src="{{ url_for('static', filename='js/logs.js') }}"></script>
+{% endblock %}
