@@ -37,7 +37,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Initialize state
         const isSelected = pdfSelector.value !== '';
-        if (chatInput) chatInput.disabled = !isSelected;
+        if (chatInput) {
+            chatInput.disabled = !isSelected;
+            chatInput.placeholder = isSelected ? 'Ask a question...' : 'Select a PDF first...';
+        }
         if (sendBtn) sendBtn.disabled = !isSelected;
     }
 

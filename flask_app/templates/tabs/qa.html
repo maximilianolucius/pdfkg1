@@ -62,6 +62,12 @@
             <div class="card-body d-flex flex-column">
                 <!-- Chat messages -->
                 <div id="chatMessages" class="flex-grow-1 overflow-auto mb-3">
+                    {% if pdf_list|length == 0 %}
+                    <div class="alert alert-warning">
+                        <h5>⚠️ No PDFs Available</h5>
+                        <p>Please upload and process PDFs in the <strong>PDF Ingestion</strong> tab first.</p>
+                    </div>
+                    {% else %}
                     <div class="alert alert-info">
                         <h5>💡 Example Questions:</h5>
                         <ul>
@@ -71,11 +77,12 @@
                             <li>What is the input voltage range?</li>
                         </ul>
                     </div>
+                    {% endif %}
                 </div>
 
                 <!-- Chat input -->
                 <div class="input-group">
-                    <input type="text" class="form-control" id="chatInput" placeholder="Ask a question..." disabled>
+                    <input type="text" class="form-control" id="chatInput" placeholder="Select a PDF first..." disabled>
                     <button class="btn btn-primary" type="button" id="sendBtn" disabled>
                         <i class="fas fa-paper-plane"></i> Send
                     </button>

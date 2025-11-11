@@ -168,6 +168,13 @@ function refreshPdfList() {
                     if (currentValue && data.pdfs.some(p => p.slug === currentValue)) {
                         selector.value = currentValue;
                     }
+                    // Auto-select if only one PDF and no current selection
+                    else if (!currentValue && data.pdfs.length === 1) {
+                        selector.value = data.pdfs[0].slug;
+                    }
+
+                    // Trigger change event to update UI
+                    selector.dispatchEvent(new Event('change'));
                 }
                 return data.pdfs;
             }
