@@ -249,6 +249,33 @@ class MilvusClient:
 
         return embeddings, chunk_ids
 
+    def has_embeddings(self, pdf_slug: str) -> bool:
+        """
+        Check whether embeddings exist for the given PDF slug.
+
+        Args:
+            pdf_slug: PDF identifier
+
+        Returns:
+            True if at least one embedding exists, otherwise False.
+        """
+        if not self._connected:
+            self.connect()
+
+        if not utility.has_collection(self.collection_name):
+            return False
+
+        collection = Collection(name=self.collection_name)
+        collection.load()
+
+        results = collection.query(
+            expr=f'pdf_slug == "{pdf_slug}"',
+            output_fields=["chunk_index"],
+            limit=1,
+        )
+
+        return bool(results)
+
     def search(
         self,
         pdf_slug: str,

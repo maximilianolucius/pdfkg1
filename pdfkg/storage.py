@@ -143,6 +143,10 @@ class ArangoStorage(StorageBackend):
     def __init__(self, base_dir: Path = Path("data"), use_milvus: bool = True):
         from pdfkg.db import ArangoDBClient, MilvusClient
 
+        self.base_dir = base_dir
+        self.faiss_dir = base_dir / "faiss_indexes"
+        self.faiss_dir.mkdir(parents=True, exist_ok=True)
+
         self.db_client = ArangoDBClient()
         # Note: connection happens in get_storage_backend()
 
@@ -158,11 +162,6 @@ class ArangoStorage(StorageBackend):
                 print(f"⚠️  Milvus initialization failed: {e}")
                 print("⚠️  Falling back to FAISS for embeddings")
                 self.use_milvus = False
-
-        # Fallback: Keep FAISS indexes in filesystem if Milvus is not available
-        if not self.use_milvus:
-            self.faiss_dir = base_dir / "faiss_indexes"
-            self.faiss_dir.mkdir(parents=True, exist_ok=True)
 
     def save_pdf_metadata(self, slug: str, **kwargs) -> None:
         self.db_client.register_pdf(slug=slug, **kwargs)
@@ -190,10 +189,6 @@ class ArangoStorage(StorageBackend):
                 self.milvus_client.save_embeddings(slug, embeddings, chunk_ids)
             except Exception as e:
                 print(f"⚠️  Milvus save failed: {e}, falling back to FAISS")
-                # Fallback to FAISS
-                if not hasattr(self, 'faiss_dir'):
-                    self.faiss_dir = Path("data") / "faiss_indexes"
-                    self.faiss_dir.mkdir(parents=True, exist_ok=True)
                 index = faiss.IndexFlatIP(embeddings.shape[1])
                 index.add(embeddings)
                 faiss.write_index(index, str(self.faiss_dir / f"{slug}.faiss"))
@@ -206,19 +201,21 @@ class ArangoStorage(StorageBackend):
     def load_embeddings(self, slug: str):
         """Load embeddings from Milvus or FAISS (returns Milvus-compatible interface)."""
         if self.use_milvus and self.milvus_client:
-            # Load from Milvus - return a wrapper that provides FAISS-like interface
             try:
-                return MilvusIndexWrapper(self.milvus_client, slug)
+                if self.milvus_client.has_embeddings(slug):
+                    # Load from Milvus - return a wrapper that provides FAISS-like interface
+                    return MilvusIndexWrapper(self.milvus_client, slug)
+                print(f"⚠️  No embeddings found in Milvus for '{slug}', checking FAISS fallback")
             except Exception as e:
                 print(f"⚠️  Milvus load failed: {e}, falling back to FAISS")
-                # Fallback to FAISS if available
-                if hasattr(self, 'faiss_dir'):
-                    faiss_path = self.faiss_dir / f"{slug}.faiss"
-                    if faiss_path.exists():
-                        return faiss.read_index(str(faiss_path))
-                raise
-        else:
-            return faiss.read_index(str(self.faiss_dir / f"{slug}.faiss"))
+
+        faiss_path = self.faiss_dir / f"{slug}.faiss"
+        if faiss_path.exists():
+            return faiss.read_index(str(faiss_path))
+
+        raise ValueError(
+            f"Embeddings for '{slug}' were not found in Milvus or in {faiss_path}"
+        )
 
     def save_metadata(self, slug: str, key: str, data: Any) -> None:
         self.db_client.save_metadata(slug, key, data)
