@@ -183,6 +183,21 @@ function refreshPdfList() {
 
 // Tab change handling
 document.addEventListener('DOMContentLoaded', () => {
+    // Allow navbar links to switch tabs
+    const navLinks = document.querySelectorAll('a[data-tab]');
+    navLinks.forEach(link => {
+        link.addEventListener('click', (event) => {
+            event.preventDefault();
+            const targetTab = link.dataset.tab;
+            const tabButton = document.querySelector(`[data-bs-target="#${targetTab}"]`);
+            if (tabButton) {
+                const tab = new bootstrap.Tab(tabButton);
+                tab.show();
+                window.location.hash = `#${targetTab}`;
+            }
+        });
+    });
+
     // Handle tab changes
     const tabButtons = document.querySelectorAll('[data-bs-toggle="tab"]');
     tabButtons.forEach(button => {

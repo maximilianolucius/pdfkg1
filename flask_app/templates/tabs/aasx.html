@@ -72,10 +72,18 @@
                     </a>
                 </div>
 
-                <!-- Submodel editors (will be populated dynamically) -->
-                <div id="submodelEditors" class="mt-3">
-                    <!-- Editors will be added here via JavaScript -->
+                <!-- XML Preview -->
+                <div class="card mb-3" id="xmlPreviewCard" style="display: none;">
+                    <div class="card-header">
+                        <i class="fas fa-file-code"></i> AAS XML Preview
+                    </div>
+                    <div class="card-body">
+                        <pre id="xmlPreview" class="bg-dark text-light p-3 rounded" style="max-height: 280px; overflow: auto; font-size: 0.85rem;"></pre>
+                    </div>
                 </div>
+
+                <!-- Submodel editors (will be populated dynamically) -->
+                <div id="submodelEditors" class="mt-3"></div>
             </div>
         </div>
     </div>

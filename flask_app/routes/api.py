@@ -10,12 +10,13 @@ from werkzeug.utils import secure_filename
 from flask_app.system_logger import system_logger
 from pdfkg.pdf_manager import ingest_pdf, auto_ingest_directory
 from pdfkg.query import answer_question
-from pdfkg.template_extractor import extract_submodels, available_submodels
+from pdfkg.template_extractor import available_submodels, extract_submodels
 from pdfkg.submodel_templates import get_template
 from pdfkg.aas_classifier import classify_pdfs_to_aas
 from pdfkg.aas_extractor import extract_aas_data
 from pdfkg.aas_validator import validate_aas_data
 from pdfkg.aas_xml_generator import generate_aas_xml
+from pdfkg.llm.config import resolve_llm_provider
 from pdfkg import llm_stats
 
 api_bp = Blueprint('api', __name__)
@@ -79,6 +80,10 @@ def upload_pdf():
 
                 system_logger.log(f"Processing uploaded file: {filename}", "INFO")
 
+                def progress_callback(pct: float, desc: str):
+                    # Log coarse-grained progress for visibility
+                    system_logger.log(f"[{filename}] {desc} ({int(pct * 100)}%)", "INFO")
+
                 try:
                     # Process PDF
                     result = ingest_pdf(
@@ -92,7 +97,7 @@ def upload_pdf():
                         save_to_db=True,
                         save_files=True,
                         output_dir=None,
-                        progress_callback=None
+                        progress_callback=progress_callback
                     )
 
                     last_successful_slug = result.pdf_slug
@@ -195,6 +200,9 @@ def reset_project():
         # Re-ingest PDFs from data/input
         use_gemini_default = bool(os.getenv("GEMINI_API_KEY"))
 
+        def reset_progress(pdf_name: str, status: str):
+            system_logger.log(f"[reset] {pdf_name}: {status}", "INFO")
+
         ingest_results = auto_ingest_directory(
             input_dir=Path("data/input"),
             storage=storage,
@@ -203,7 +211,7 @@ def reset_project():
             use_gemini=use_gemini_default,
             save_to_db=True,
             save_files=True,
-            progress_callback=None,
+            progress_callback=reset_progress,
             force_reprocess=True,
         )
 
@@ -253,19 +261,21 @@ def extract_submodels_api():
         data = request.get_json()
         selected_submodels = data.get('submodels', [])
         llm_provider = data.get('llm_provider', 'gemini')
+        use_batch = data.get('use_batch', True)
 
         if not selected_submodels:
             return jsonify({'success': False, 'error': 'No submodels selected'}), 400
 
         storage = current_app.config['storage']
 
-        system_logger.log(f"Extracting submodels: {', '.join(selected_submodels)}", 'INFO')
+        system_logger.log(f"Extracting submodels ({'batch' if use_batch else 'legacy'}): {', '.join(selected_submodels)}", 'INFO')
 
         extracted = extract_submodels(
             storage=storage,
             submodels=selected_submodels,
             llm_provider=llm_provider,
-            progress_callback=None
+            progress_callback=None,
+            use_batch=use_batch
         )
 
         # Format results
@@ -312,16 +322,16 @@ def generate_aasx_api():
 
         storage = current_app.config['storage']
 
-        # Generate timestamp for filename
+        # Normalize provider and generate timestamped path
+        llm_provider_resolved = resolve_llm_provider(llm_provider)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path("data/output")
+        output_dir = Path("data/out")
         output_dir.mkdir(parents=True, exist_ok=True)
-        xml_filename = f"aas_output_{timestamp}.xml"
-        xml_path = output_dir / xml_filename
+        xml_path = output_dir / f"aas_output_{timestamp}.xml"
 
         xml_output = generate_aas_xml(
             storage=storage,
-            llm_provider=llm_provider,
+            llm_provider=llm_provider_resolved,
             output_path=xml_path,
             data=submodel_data
         )
@@ -334,7 +344,7 @@ def generate_aasx_api():
         return jsonify({
             'success': True,
             'xml_path': str(xml_path),
-            'filename': xml_filename,
+            'filename': xml_path.name,
             'size': len(xml_output)
         })
 
@@ -347,9 +357,13 @@ def generate_aasx_api():
 def download_file(filename):
     """Download generated file."""
     try:
-        file_path = Path("data/output") / filename
+        candidates = [
+            Path("data/out") / filename,
+            Path("data/output") / filename,
+        ]
+        file_path = next((p for p in candidates if p.exists()), None)
 
-        if not file_path.exists():
+        if not file_path:
             return jsonify({'success': False, 'error': 'File not found'}), 404
 
         return send_file(str(file_path), as_attachment=True)

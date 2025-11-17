@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatMessages = document.getElementById('chatMessages');
     const topKSlider = document.getElementById('topK');
     const topKValue = document.getElementById('topKValue');
+    const exampleButtons = document.querySelectorAll('.example-question');
 
     let chatHistory = [];
 
@@ -123,6 +124,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Example questions
+    exampleButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const question = btn.dataset.question || '';
+            chatInput.value = question;
+            chatInput.focus();
+        });
+    });
+
     // Socket.IO event handlers for chat
     window.pdfkg.socket.on('chat_thinking', (data) => {
         console.log('Assistant is thinking...');
@@ -166,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
             role,
             content,
             sources,
-            debug,
+            debug: debug || {},
             isError,
             timestamp: new Date()
         });
@@ -207,12 +217,32 @@ document.addEventListener('DOMContentLoaded', () => {
             if (msg.sources && msg.sources.length > 0) {
                 html += '<div class="message-sources">';
                 html += '<h6>📚 Sources:</h6>';
-                html += '<ol>';
+                html += '<ol class="mb-0">';
                 msg.sources.forEach(source => {
-                    html += `<li>${source.text}</li>`;
+                    const scoreText = source.score ? ` (score: ${Number(source.score).toFixed(2)})` : '';
+                    const detail = source.type === 'chunk'
+                        ? `Section ${source.section}, Page ${source.page || 'N/A'}${scoreText}`
+                        : `${source.node_type || 'Node'}: ${source.label}`;
+                    html += `<li>${window.pdfkg.formatMarkdown(detail)}</li>`;
                 });
                 html += '</ol>';
                 html += '</div>';
+            }
+
+            // Add debug plan if present
+            if (msg.debug && msg.debug.plan) {
+                const planJson = JSON.stringify(msg.debug.plan, null, 2);
+                const planId = `plan-${msg.timestamp.getTime()}-${Math.random().toString(16).slice(2)}`;
+                html += `
+                    <div class="message-debug mt-2">
+                        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#${planId}">
+                            🔍 View query plan
+                        </button>
+                        <div class="collapse mt-2" id="${planId}">
+                            <pre class="mb-0"><code>${planJson}</code></pre>
+                        </div>
+                    </div>
+                `;
             }
 
             messageDiv.innerHTML = html;

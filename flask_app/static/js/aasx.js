@@ -1,5 +1,5 @@
 /**
- * JavaScript for AASX Generation tab
+ * JavaScript for AASX Generation tab with evidence-aware editors.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -12,8 +12,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const aasxProgressText = document.getElementById('aasxProgressText');
     const downloadContainer = document.getElementById('downloadContainer');
     const downloadLink = document.getElementById('downloadLink');
+    const xmlPreview = document.getElementById('xmlPreview');
+    const xmlPreviewCard = document.getElementById('xmlPreviewCard');
     const submodelEditors = document.getElementById('submodelEditors');
 
+    const MAX_FIELDS_PER_TAB = 30;
     let extractedData = {};
 
     // Enable/disable generate button based on checkbox selection
@@ -21,9 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
         checkbox.addEventListener('change', () => {
             const anyChecked = Array.from(submodelCheckboxes).some(cb => cb.checked);
             generateAasxBtn.disabled = !anyChecked || Object.keys(extractedData).length === 0;
-
-            // Hide download container when selection changes
             downloadContainer.style.display = 'none';
+            if (xmlPreviewCard) xmlPreviewCard.style.display = 'none';
         });
     });
 
@@ -41,11 +43,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const llmProvider = document.querySelector('input[name="aasxLlmProvider"]:checked').value;
 
-            // Disable button
             extractSubmodelsBtn.disabled = true;
             extractSubmodelsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Extracting...';
 
-            // Show progress
             aasxProgressContainer.style.display = 'block';
             updateAasxProgress(10, 'Extracting submodels...');
 
@@ -61,25 +61,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateAasxProgress(100, 'Extraction complete!');
 
                 if (data.success) {
-                    extractedData = data.extracted;
+                    // Normalize metadata defaults
+                    extractedData = normalizeExtraction(data.extracted || {});
 
-                    // Display results
-                    displayExtractedSubmodels(data.extracted);
-
-                    // Enable generate button
+                    renderSubmodelEditors(extractedData);
                     generateAasxBtn.disabled = false;
 
-                    // Update status
-                    let statusHtml = '<div class="alert alert-success">✅ Extraction complete!</div>';
+                    let statusHtml = '<div class="alert alert-success mb-2">✅ Extraction complete!</div>';
                     if (data.stats && data.stats.length > 0) {
-                        statusHtml += '<div class="card"><div class="card-body"><h6>Statistics:</h6><ul>';
-                        data.stats.forEach(stat => {
-                            statusHtml += `<li>${stat}</li>`;
-                        });
+                        statusHtml += '<div class="card"><div class="card-body"><h6>Statistics:</h6><ul class="mb-0">';
+                        data.stats.forEach(stat => statusHtml += `<li>${stat}</li>`);
                         statusHtml += '</ul></div></div>';
                     }
                     aasxStatus.innerHTML = statusHtml;
-
                     window.pdfkg.showNotification('Submodels extracted successfully!', 'success');
                 } else {
                     throw new Error(data.error || 'Extraction failed');
@@ -95,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(() => {
                     aasxProgressContainer.style.display = 'none';
                     updateAasxProgress(0, '');
-                }, 2000);
+                }, 1500);
             }
         });
     }
@@ -104,10 +98,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (generateAasxBtn) {
         generateAasxBtn.addEventListener('click', async () => {
             const llmProvider = document.querySelector('input[name="aasxLlmProvider"]:checked').value;
+            const selectedSubmodels = Array.from(submodelCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
 
-            // Collect current submodel data (including any edits)
             const submodelData = {};
-            Object.keys(extractedData).forEach(key => {
+            for (const key of selectedSubmodels) {
+                if (!extractedData[key]) continue;
                 const editorTextarea = document.getElementById(`editor_${key}`);
                 if (editorTextarea) {
                     try {
@@ -115,21 +112,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     } catch (error) {
                         console.error(`Invalid JSON for ${key}:`, error);
                         window.pdfkg.showNotification(`Invalid JSON for ${key}`, 'danger');
-                        throw error;
+                        return;
                     }
                 }
-            });
+            }
 
             if (Object.keys(submodelData).length === 0) {
                 window.pdfkg.showNotification('No submodel data available', 'warning');
                 return;
             }
 
-            // Disable button
             generateAasxBtn.disabled = true;
             generateAasxBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
 
-            // Show progress
             aasxProgressContainer.style.display = 'block';
             updateAasxProgress(50, 'Generating AAS XML...');
 
@@ -145,20 +140,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateAasxProgress(100, 'Generation complete!');
 
                 if (data.success) {
-                    // Show download link
                     downloadLink.href = `/api/download/${data.filename}`;
                     downloadLink.textContent = `Download ${data.filename}`;
                     downloadContainer.style.display = 'block';
-
-                    // Update status
                     aasxStatus.innerHTML = `
-                        <div class="alert alert-success">
-                            <h5>✅ AAS File Generated!</h5>
-                            <p>File: ${data.filename}</p>
-                            <p>Size: ${(data.size / 1024).toFixed(2)} KB</p>
+                        <div class="alert alert-success mb-2">
+                            <h5 class="mb-1">✅ AAS File Generated!</h5>
+                            <div>File: ${data.filename}</div>
+                            <div>Size: ${(data.size / 1024).toFixed(2)} KB</div>
                         </div>
                     `;
 
+                    // Best-effort preview
+                    loadXmlPreview(data.filename);
                     window.pdfkg.showNotification('AASX generated successfully!', 'success');
                 } else {
                     throw new Error(data.error || 'Generation failed');
@@ -174,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(() => {
                     aasxProgressContainer.style.display = 'none';
                     updateAasxProgress(0, '');
-                }, 2000);
+                }, 1500);
             }
         });
     }
@@ -189,65 +183,345 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function displayExtractedSubmodels(extracted) {
-        if (!submodelEditors) return;
+    function normalizeExtraction(extracted) {
+        const result = {};
+        Object.entries(extracted || {}).forEach(([key, payload]) => {
+            const data = payload.data || {};
+            const metadata = payload.metadata || {};
+            Object.keys(metadata).forEach(path => {
+                const entry = metadata[path] || {};
+                if (entry.original_value === undefined) {
+                    entry.original_value = entry.value ?? null;
+                }
+                if (entry.is_edited === undefined) {
+                    entry.is_edited = false;
+                }
+                if (!entry.target_key) {
+                    entry.target_key = 'value';
+                }
+                metadata[path] = entry;
+            });
+            result[key] = { data, metadata };
+        });
+        return result;
+    }
 
+    function categorizeMetadata(meta) {
+        const needsReview = [];
+        const userDefined = [];
+        const completed = [];
+
+        Object.entries(meta || {}).forEach(([path, info]) => {
+            if (info.is_edited) {
+                userDefined.push([path, info]);
+                return;
+            }
+            const confidence = info.confidence || 0.0;
+            const value = info.value;
+            const isMissing = (value === null || value === undefined) && confidence === 0.0;
+            if (isMissing || confidence < 0.8) {
+                needsReview.push([path, info]);
+            } else {
+                completed.push([path, info]);
+            }
+        });
+
+        return {
+            review: needsReview.slice(0, MAX_FIELDS_PER_TAB),
+            user: userDefined.slice(0, MAX_FIELDS_PER_TAB),
+            completed: completed.slice(0, MAX_FIELDS_PER_TAB)
+        };
+    }
+
+    function renderSubmodelEditors(extracted) {
+        if (!submodelEditors) return;
         submodelEditors.innerHTML = '';
 
-        Object.keys(extracted).forEach(key => {
-            const data = extracted[key];
-            const jsonStr = JSON.stringify(data.data, null, 2);
+        Object.entries(extracted).forEach(([key, payload]) => {
+            const card = document.createElement('div');
+            card.className = 'card mb-3 submodel-editor';
 
-            const accordionItem = document.createElement('div');
-            accordionItem.className = 'accordion-item mb-3';
+            const navId = `nav-${key}`;
+            const jsonTabId = `json-${key}`;
+            const evidenceTabId = `evidence-${key}`;
 
-            // Format metadata
-            let metadataHtml = '<p class="small text-muted">No evidence captured yet.</p>';
-            if (data.metadata && Object.keys(data.metadata).length > 0) {
-                metadataHtml = '<h6>Evidence:</h6><ul class="small">';
-                Object.keys(data.metadata).forEach(path => {
-                    const info = data.metadata[path];
-                    const confidence = info.confidence ? info.confidence.toFixed(2) : 'N/A';
-                    metadataHtml += `<li><code>${path}</code> (confidence: ${confidence})`;
-                    if (info.sources && info.sources.length > 0) {
-                        metadataHtml += '<ul>';
-                        info.sources.slice(0, 3).forEach(source => {
-                            metadataHtml += `<li>${source}</li>`;
-                        });
-                        metadataHtml += '</ul>';
-                    }
-                    metadataHtml += '</li>';
-                });
-                metadataHtml += '</ul>';
-            }
-
-            accordionItem.innerHTML = `
-                <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse_${key}">
-                        ${key}
+            card.innerHTML = `
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div><i class="fas fa-file-alt"></i> ${key}</div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-submodel="${key}" data-action="download-json">
+                        <i class="fas fa-download"></i> Download JSON
                     </button>
-                </h2>
-                <div id="collapse_${key}" class="accordion-collapse collapse">
-                    <div class="accordion-body">
-                        <div class="mb-3">
-                            <label for="editor_${key}" class="form-label">JSON Data</label>
-                            <textarea class="form-control font-monospace" id="editor_${key}" rows="15">${jsonStr}</textarea>
+                </div>
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="${navId}" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#${jsonTabId}" type="button" role="tab">JSON</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#${evidenceTabId}" type="button" role="tab">Evidence</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content pt-3">
+                        <div class="tab-pane fade show active" id="${jsonTabId}" role="tabpanel">
+                            <label class="form-label" for="editor_${key}">JSON Data</label>
+                            <textarea class="form-control font-monospace submodel-json" id="editor_${key}" rows="16" data-submodel="${key}">${JSON.stringify(payload.data, null, 2)}</textarea>
                             <div class="form-text">You can edit the JSON data before generating the AAS file</div>
                         </div>
-                        <div class="mb-3">
-                            ${metadataHtml}
+                        <div class="tab-pane fade" id="${evidenceTabId}" role="tabpanel">
+                            <div class="row" id="evidence_${key}"></div>
                         </div>
                     </div>
                 </div>
             `;
 
-            submodelEditors.appendChild(accordionItem);
+            submodelEditors.appendChild(card);
+            renderEvidenceTabs(key, payload.metadata);
         });
 
-        // Initialize Bootstrap accordions
-        const accordions = submodelEditors.querySelectorAll('.accordion-collapse');
-        accordions.forEach(accordion => {
-            new bootstrap.Collapse(accordion, { toggle: false });
+        // Wire download buttons
+        submodelEditors.querySelectorAll('[data-action="download-json"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const submodel = btn.dataset.submodel;
+                const editor = document.getElementById(`editor_${submodel}`);
+                if (!editor) return;
+                const blob = new Blob([editor.value], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${submodel}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
         });
+
+        // Keep extractedData in sync when users edit JSON directly
+        submodelEditors.querySelectorAll('.submodel-json').forEach(textarea => {
+            textarea.addEventListener('change', () => {
+                const key = textarea.dataset.submodel;
+                if (!key || !extractedData[key]) return;
+                try {
+                    const parsed = JSON.parse(textarea.value);
+                    extractedData[key].data = parsed;
+                } catch (err) {
+                    window.pdfkg.showNotification(`Invalid JSON in ${key}`, 'danger');
+                }
+            });
+        });
+    }
+
+    function renderEvidenceTabs(submodelKey, metadata) {
+        const container = document.getElementById(`evidence_${submodelKey}`);
+        if (!container) return;
+
+        const categories = categorizeMetadata(metadata);
+        container.innerHTML = `
+            ${renderEvidenceColumn(submodelKey, 'Needs Review', 'review', categories.review)}
+            ${renderEvidenceColumn(submodelKey, 'User Defined', 'user', categories.user)}
+            ${renderEvidenceColumn(submodelKey, 'Completed', 'completed', categories.completed)}
+        `;
+
+        // Wire save/revert buttons
+        container.querySelectorAll('[data-action="save"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const { submodel, category, index } = btn.dataset;
+                const textarea = document.getElementById(`edit_${submodel}_${category}_${index}`);
+                if (!textarea) return;
+                handleFieldSave(submodel, category, Number(index), textarea.value);
+            });
+        });
+
+        container.querySelectorAll('[data-action="revert"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const { submodel, category, index } = btn.dataset;
+                handleFieldRevert(submodel, category, Number(index));
+            });
+        });
+    }
+
+    function renderEvidenceColumn(submodelKey, title, categoryKey, entries) {
+        const pillClass = categoryKey === 'completed'
+            ? 'badge bg-success'
+            : categoryKey === 'user'
+                ? 'badge bg-primary'
+                : 'badge bg-warning text-dark';
+
+        if (!entries || entries.length === 0) {
+            return `
+                <div class="col-md-4 mb-3">
+                    <div class="evidence-card card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>${title}</span>
+                            <span class="${pillClass}">0</span>
+                        </div>
+                        <div class="card-body text-muted small">No fields in this category.</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        const itemsHtml = entries.map(([path, info], idx) => {
+            const confidence = info.confidence !== undefined && info.confidence !== null
+                ? Number(info.confidence).toFixed(2)
+                : 'N/A';
+            const sourcesHtml = Array.isArray(info.sources) && info.sources.length > 0
+                ? `<h6 class="mt-2 mb-1">Sources</h6><ul class="small mb-0">${info.sources.map(s => `<li>${s}</li>`).join('')}</ul>`
+                : '<div class="text-muted small">No sources provided.</div>';
+            const valuePreview = info.value !== undefined && info.value !== null
+                ? `<pre class="small bg-light p-2 rounded">${JSON.stringify(info.value, null, 2)}</pre>`
+                : '<div class="text-muted small">No value extracted.</div>';
+
+            return `
+                <div class="accordion accordion-flush" id="acc_${submodelKey}_${categoryKey}_${idx}">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse_${submodelKey}_${categoryKey}_${idx}">
+                                <div class="d-flex flex-column w-100">
+                                    <div class="d-flex justify-content-between">
+                                        <span><code>${path}</code></span>
+                                        <span class="badge bg-secondary ms-2">conf: ${confidence}</span>
+                                    </div>
+                                    <small class="text-muted">${info.is_edited ? 'User edited' : 'Extracted'}</small>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="collapse_${submodelKey}_${categoryKey}_${idx}" class="accordion-collapse collapse">
+                            <div class="accordion-body">
+                                <div>${valuePreview}</div>
+                                ${sourcesHtml}
+                                <div class="mt-3">
+                                    <label class="form-label">Edit value (JSON)</label>
+                                    <textarea class="form-control font-monospace" rows="6" id="edit_${submodelKey}_${categoryKey}_${idx}">${JSON.stringify(info.value, null, 2)}</textarea>
+                                    <div class="d-flex gap-2 mt-2">
+                                        <button type="button" class="btn btn-primary btn-sm" data-action="save" data-submodel="${submodelKey}" data-category="${categoryKey}" data-index="${idx}">Save</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" data-action="revert" data-submodel="${submodelKey}" data-category="${categoryKey}" data-index="${idx}">Revert</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="col-md-4 mb-3">
+                <div class="evidence-card card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>${title}</span>
+                        <span class="${pillClass}">${entries.length}</span>
+                    </div>
+                    <div class="card-body overflow-auto" style="max-height: 420px;">
+                        ${itemsHtml}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function handleFieldSave(submodelKey, category, index, newValueStr) {
+        const submodel = extractedData[submodelKey];
+        if (!submodel) return;
+
+        let parsedValue;
+        try {
+            parsedValue = JSON.parse(newValueStr);
+        } catch (err) {
+            window.pdfkg.showNotification(`Invalid JSON for ${submodelKey}`, 'danger');
+            return;
+        }
+
+        const lists = categorizeMetadata(submodel.metadata);
+        const entry = (lists[category] || [])[index];
+        if (!entry) return;
+        const [path, meta] = entry;
+        const targetKey = meta.target_key || 'value';
+
+        // Update metadata
+        meta.value = parsedValue;
+        meta.is_edited = true;
+
+        // Update JSON payload
+        const updated = applyFieldUpdate(submodel.data, path, parsedValue, targetKey);
+        if (updated) {
+            const editor = document.getElementById(`editor_${submodelKey}`);
+            if (editor) {
+                editor.value = JSON.stringify(submodel.data, null, 2);
+            }
+            window.pdfkg.showNotification(`Saved changes for ${path}`, 'success', 1500);
+        } else {
+            window.pdfkg.showNotification(`Field ${path} not found in JSON`, 'warning', 2500);
+        }
+
+        renderEvidenceTabs(submodelKey, submodel.metadata);
+    }
+
+    function handleFieldRevert(submodelKey, category, index) {
+        const submodel = extractedData[submodelKey];
+        if (!submodel) return;
+
+        const lists = categorizeMetadata(submodel.metadata);
+        const entry = (lists[category] || [])[index];
+        if (!entry) return;
+        const [path, meta] = entry;
+        const targetKey = meta.target_key || 'value';
+
+        meta.value = meta.original_value ?? null;
+        meta.is_edited = false;
+
+        applyFieldUpdate(submodel.data, path, meta.original_value, targetKey);
+        const editor = document.getElementById(`editor_${submodelKey}`);
+        if (editor) {
+            editor.value = JSON.stringify(submodel.data, null, 2);
+        }
+        renderEvidenceTabs(submodelKey, submodel.metadata);
+        window.pdfkg.showNotification(`Reverted ${path}`, 'info', 1500);
+    }
+
+    function applyFieldUpdate(jsonData, idShort, newContent, targetKey = 'value') {
+        if (!jsonData) return false;
+        const copy = jsonData;
+
+        const updateElementByIdShort = (elements) => {
+            if (!Array.isArray(elements)) return false;
+            for (const element of elements) {
+                if (element && element.idShort === idShort) {
+                    element[targetKey] = newContent ?? null;
+                    return true;
+                }
+                const modelType = element && element.modelType;
+                if ((modelType === 'SubmodelElementCollection' || modelType === 'SubmodelElementList') && Array.isArray(element.value)) {
+                    if (updateElementByIdShort(element.value)) return true;
+                }
+            }
+            return false;
+        };
+
+        if (Array.isArray(copy.submodels)) {
+            for (const submodel of copy.submodels) {
+                if (updateElementByIdShort(submodel.submodelElements)) {
+                    return true;
+                }
+            }
+        }
+
+        if (updateElementByIdShort(copy.submodelElements)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    async function loadXmlPreview(filename) {
+        if (!xmlPreview || !xmlPreviewCard) return;
+        try {
+            const response = await fetch(`/api/download/${filename}`);
+            const text = await response.text();
+            xmlPreview.textContent = text.slice(0, 8000); // avoid huge renders
+            xmlPreviewCard.style.display = 'block';
+        } catch (err) {
+            console.error('Failed to load XML preview', err);
+            xmlPreview.textContent = 'Preview unavailable.';
+            xmlPreviewCard.style.display = 'block';
+        }
     }
 });

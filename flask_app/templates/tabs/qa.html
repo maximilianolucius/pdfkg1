@@ -27,12 +27,6 @@
                 <div class="mb-3">
                     <label class="form-label">LLM Provider</label>
                     <div class="form-check">
-                        <input class="form-check-input" type="radio" name="llmProvider" id="llmNone" value="none">
-                        <label class="form-check-label" for="llmNone">
-                            No LLM (keyword only)
-                        </label>
-                    </div>
-                    <div class="form-check">
                         <input class="form-check-input" type="radio" name="llmProvider" id="llmGemini" value="gemini" checked>
                         <label class="form-check-label" for="llmGemini">
                             Gemini
@@ -50,6 +44,16 @@
                     <label for="topK" class="form-label">Number of Sources: <span id="topKValue">5</span></label>
                     <input type="range" class="form-range" id="topK" min="1" max="10" step="1" value="5">
                     <div class="form-text">More sources = more context</div>
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label">Example Questions</label>
+                    <div class="d-grid gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm example-question" data-question="What are the operative temperature limits?">Operative temperature limits</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm example-question" data-question="Summarize the safety warnings for installation.">Safety warnings for installation</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm example-question" data-question="List the available models and key differences.">Available models & differences</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm example-question" data-question="What’s the recommended maintenance schedule?">Maintenance schedule</button>
+                    </div>
                 </div>
             </div>
         </div>
