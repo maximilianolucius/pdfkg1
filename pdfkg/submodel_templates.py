@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
 
-TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "submodel_templates"
+TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 
 @dataclass
