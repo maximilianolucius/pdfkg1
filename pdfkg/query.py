@@ -3,6 +3,7 @@ Question-answering functionality using the knowledge graph and embeddings.
 """
 
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,9 @@ import pandas as pd
 from dotenv import load_dotenv
 
 from pdfkg.embeds import encode_query
+from pdfkg import llm_stats
+from pdfkg.llm.config import resolve_llm_provider
+from pdfkg.llm.mistral_client import chat as mistral_chat, get_model_name as mistral_model_name
 
 # Load .env file
 load_dotenv()
@@ -309,7 +313,7 @@ Answer:"""
     return response.text
 
 
-def generate_answer_mistral(question: str, context_chunks: list[dict]) -> str:
+def generate_answer_mistral(question: str, context_chunks: list[dict], *, label: str = "qa") -> str:
     """
     Generate answer using Mistral AI.
 
@@ -330,10 +334,7 @@ def generate_answer_mistral(question: str, context_chunks: list[dict]) -> str:
         raise RuntimeError("MISTRAL_API_KEY not set in .env")
 
     # Get model name from environment or use default
-    model_name = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
-
-    # Initialize Mistral client
-    client = Mistral(api_key=api_key)
+    model_name = mistral_model_name()
 
     # Build context (include PDF filename if available for global search)
     context_parts = []
@@ -360,18 +361,38 @@ Instructions:
 
 Answer:"""
 
-    # Generate response
-    response = client.chat.complete(
-        model=model_name,
+    start = time.time()
+    response = mistral_chat(
         messages=[
             {
                 "role": "user",
                 "content": prompt,
             }
         ],
+        model=model_name,
     )
 
-    return response.choices[0].message.content
+    usage = getattr(response, "usage", None)
+    tokens_in, tokens_out, total_tokens = llm_stats.extract_token_usage(usage)
+    llm_stats.record_call(
+        "mistral",
+        phase=label,
+        label=label,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        total_tokens=total_tokens,
+        metadata={
+            "model": model_name,
+            "elapsed_ms": int((time.time() - start) * 1000),
+            "prompt_chars": len(prompt),
+            "chunks": len(context_chunks),
+        },
+    )
+
+    content = response.choices[0].message.content
+    if isinstance(content, list):
+        content = "\n".join(str(item) for item in content)
+    return str(content)
 
 
 def format_simple_answer(question: str, context_chunks: list[dict]) -> str:
@@ -429,6 +450,10 @@ def answer_question(
     print(f"DEBUG QUERY: Model: {model_name}")
     print(f"DEBUG QUERY: Top K: {top_k}")
     print(f"DEBUG QUERY: LLM Provider: {llm_provider}")
+
+    # Validate/normalize provider when using LLM
+    if llm_provider != "none":
+        llm_provider = resolve_llm_provider(llm_provider)
 
     # Get storage backend if not provided
     if storage is None:

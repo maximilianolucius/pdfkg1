@@ -10,6 +10,12 @@ from typing import Any, Dict, Iterable, List, Tuple
 
 from pdfkg.submodel_templates import get_template, list_submodel_templates
 from pdfkg import llm_stats
+# Batched extractor from branch
+from pdfkg.template_extractor_batch import (
+    TemplateAASExtractor as BatchedTemplateAASExtractor,
+    extract_submodels as batched_extract_submodels,
+    available_submodels as batched_available_submodels,
+)
 
 try:
     import google.generativeai as genai
@@ -52,7 +58,7 @@ class ExtractionResult:
 
 
 class TemplateAASExtractor:
-    """Extract submodel data using JSON templates as the contract."""
+    """Extract submodel data using JSON templates as the contract (legacy, kept for API compatibility)."""
 
     def __init__(self, storage, llm_provider: str = "gemini") -> None:
         self.storage = storage
@@ -336,7 +342,20 @@ class TemplateAASExtractor:
         return payload
 
 
-def extract_submodels(storage, submodels: Iterable[str], llm_provider: str = "gemini", progress_callback=None) -> Dict[str, Dict[str, Any]]:
+def extract_submodels(
+    storage,
+    submodels: Iterable[str],
+    llm_provider: str = "gemini",
+    progress_callback=None,
+    use_batch: bool = True
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Extract submodels using the batched extractor by default.
+    Pass use_batch=False to use the legacy extractor.
+    """
+    if use_batch:
+        return batched_extract_submodels(storage, submodels, llm_provider=llm_provider, progress_callback=progress_callback)
+
     extractor = TemplateAASExtractor(storage=storage, llm_provider=llm_provider)
     raw_results = extractor.extract(submodels, progress_callback=progress_callback)
     prepared: Dict[str, Dict[str, Any]] = {}
@@ -346,7 +365,7 @@ def extract_submodels(storage, submodels: Iterable[str], llm_provider: str = "ge
 
 
 def available_submodels() -> List[str]:
-    return list_submodel_templates()
+    return batched_available_submodels()
 
 
 def _is_number(value: Any) -> bool:

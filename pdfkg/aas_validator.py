@@ -17,7 +17,12 @@ If incomplete:
 
 import json
 import os
+import time
 from typing import Dict, List, Optional, Any, Tuple
+
+from pdfkg import llm_stats
+from pdfkg.llm.config import resolve_llm_provider
+from pdfkg.llm.mistral_client import chat as mistral_chat, get_model_name as get_mistral_model_name
 
 # LLM imports
 try:
@@ -69,7 +74,7 @@ class AASValidator:
             llm_provider: LLM provider ("gemini" or "mistral")
         """
         self.storage = storage
-        self.llm_provider = llm_provider.lower()
+        self.llm_provider = resolve_llm_provider(llm_provider) if llm_provider else resolve_llm_provider(None)
 
         # Initialize LLM client
         if self.llm_provider == "gemini":
@@ -89,8 +94,7 @@ class AASValidator:
             api_key = os.getenv("MISTRAL_API_KEY")
             if not api_key:
                 raise ValueError("MISTRAL_API_KEY not found in environment")
-            self.llm_client = Mistral(api_key=api_key)
-            self.mistral_model = os.getenv("MISTRAL_MODEL", "mistral-large-latest")
+            self.mistral_model = get_mistral_model_name()
             print(f"✅ Initialized Mistral model: {self.mistral_model}")
 
         else:
@@ -478,11 +482,30 @@ Return ONLY valid JSON with any relevant data found.
             return response.text
 
         elif self.llm_provider == "mistral":
-            response = self.llm_client.chat.complete(
+            start = time.time()
+            response = mistral_chat(
+                messages=[{"role": "user", "content": prompt}],
                 model=self.mistral_model,
-                messages=[{"role": "user", "content": prompt}]
             )
-            return response.choices[0].message.content
+            usage = getattr(response, "usage", None)
+            tokens_in, tokens_out, total_tokens = llm_stats.extract_token_usage(usage)
+            llm_stats.record_call(
+                "mistral",
+                phase="aas_validation",
+                label="aas_validation",
+                tokens_in=tokens_in,
+                tokens_out=tokens_out,
+                total_tokens=total_tokens,
+                metadata={
+                    "model": self.mistral_model,
+                    "elapsed_ms": int((time.time() - start) * 1000),
+                    "prompt_chars": len(prompt),
+                },
+            )
+            content = response.choices[0].message.content
+            if isinstance(content, list):
+                content = "\n".join(str(item) for item in content)
+            return str(content)
 
     def _parse_json_response(self, response_text: str) -> Dict:
         """Parse LLM JSON response."""
