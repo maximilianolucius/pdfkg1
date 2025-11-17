@@ -61,8 +61,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateAasxProgress(100, 'Extraction complete!');
 
                 if (data.success) {
-                    // Normalize metadata defaults
+                    // Normalize metadata defaults and store originals for revert/format helpers
                     extractedData = normalizeExtraction(data.extracted || {});
+                    Object.keys(extractedData).forEach(key => {
+                        extractedData[key].originalData = JSON.parse(JSON.stringify(extractedData[key].data));
+                    });
 
                     renderSubmodelEditors(extractedData);
                     generateAasxBtn.disabled = false;
@@ -263,9 +266,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     </ul>
                     <div class="tab-content pt-3">
                         <div class="tab-pane fade show active" id="${jsonTabId}" role="tabpanel">
-                            <label class="form-label" for="editor_${key}">JSON Data</label>
-                            <textarea class="form-control font-monospace submodel-json" id="editor_${key}" rows="16" data-submodel="${key}">${JSON.stringify(payload.data, null, 2)}</textarea>
-                            <div class="form-text">You can edit the JSON data before generating the AAS file</div>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label mb-0" for="editor_${key}">JSON Data</label>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-secondary" data-action="format-json" data-submodel="${key}"><i class="fas fa-wand-magic-sparkles"></i> Format</button>
+                                    <button type="button" class="btn btn-outline-secondary" data-action="validate-json" data-submodel="${key}"><i class="fas fa-check"></i> Validate</button>
+                                    <button type="button" class="btn btn-outline-secondary" data-action="revert-json" data-submodel="${key}"><i class="fas fa-rotate-left"></i> Revert</button>
+                                </div>
+                            </div>
+                            <textarea class="form-control font-monospace submodel-json" id="editor_${key}" rows="18" data-submodel="${key}">${JSON.stringify(payload.data, null, 2)}</textarea>
+                            <div class="form-text">Edit and format JSON; invalid JSON will be highlighted on validation.</div>
                         </div>
                         <div class="tab-pane fade" id="${evidenceTabId}" role="tabpanel">
                             <div class="row" id="evidence_${key}"></div>
@@ -294,6 +304,26 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
+        // Format/Validate/Revert handlers
+        submodelEditors.querySelectorAll('[data-action="format-json"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.submodel;
+                formatJsonForKey(key);
+            });
+        });
+        submodelEditors.querySelectorAll('[data-action="validate-json"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.submodel;
+                validateJsonForKey(key, { showToast: true });
+            });
+        });
+        submodelEditors.querySelectorAll('[data-action="revert-json"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.submodel;
+                revertJsonForKey(key);
+            });
+        });
+
         // Keep extractedData in sync when users edit JSON directly
         submodelEditors.querySelectorAll('.submodel-json').forEach(textarea => {
             textarea.addEventListener('change', () => {
@@ -307,6 +337,44 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         });
+    }
+
+    function formatJsonForKey(key) {
+        const editor = document.getElementById(`editor_${key}`);
+        if (!editor) return;
+        try {
+            const parsed = JSON.parse(editor.value);
+            editor.value = JSON.stringify(parsed, null, 2);
+            window.pdfkg.showNotification(`Formatted JSON for ${key}`, 'success', 1500);
+        } catch (err) {
+            window.pdfkg.showNotification(`Invalid JSON in ${key}`, 'danger');
+        }
+    }
+
+    function validateJsonForKey(key, opts = {}) {
+        const editor = document.getElementById(`editor_${key}`);
+        if (!editor) return false;
+        try {
+            JSON.parse(editor.value);
+            editor.classList.remove('is-invalid');
+            editor.classList.add('is-valid');
+            if (opts.showToast) window.pdfkg.showNotification(`JSON valid for ${key}`, 'success', 1500);
+            return true;
+        } catch (err) {
+            editor.classList.remove('is-valid');
+            editor.classList.add('is-invalid');
+            if (opts.showToast) window.pdfkg.showNotification(`Invalid JSON in ${key}: ${err.message}`, 'danger');
+            return false;
+        }
+    }
+
+    function revertJsonForKey(key) {
+        const editor = document.getElementById(`editor_${key}`);
+        if (!editor || !extractedData[key] || !extractedData[key].originalData) return;
+        editor.value = JSON.stringify(extractedData[key].originalData, null, 2);
+        extractedData[key].data = JSON.parse(JSON.stringify(extractedData[key].originalData));
+        window.pdfkg.showNotification(`Reverted JSON for ${key}`, 'info', 1500);
+        renderEvidenceTabs(key, extractedData[key].metadata);
     }
 
     function renderEvidenceTabs(submodelKey, metadata) {
