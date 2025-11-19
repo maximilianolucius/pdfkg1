@@ -17,6 +17,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const submodelEditors = document.getElementById('submodelEditors');
 
     const MAX_FIELDS_PER_TAB = 30;
+    const getDomSafeId = (key = '') => key.replace(/[^A-Za-z0-9_-]/g, '_');
+    const getEditorElement = (key) => document.getElementById(`editor_${getDomSafeId(key)}`);
+
     let extractedData = {};
 
     // Enable/disable generate button based on checkbox selection
@@ -108,7 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const submodelData = {};
             for (const key of selectedSubmodels) {
                 if (!extractedData[key]) continue;
-                const editorTextarea = document.getElementById(`editor_${key}`);
+                const editorTextarea = getEditorElement(key);
                 if (editorTextarea) {
                     try {
                         submodelData[key] = JSON.parse(editorTextarea.value);
@@ -244,9 +247,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const card = document.createElement('div');
             card.className = 'card mb-3 submodel-editor';
 
-            const navId = `nav-${key}`;
-            const jsonTabId = `json-${key}`;
-            const evidenceTabId = `evidence-${key}`;
+            const safeKey = getDomSafeId(key);
+            const navId = `nav-${safeKey}`;
+            const jsonTabId = `json-${safeKey}`;
+            const evidenceTabId = `evidence-${safeKey}`;
 
             card.innerHTML = `
                 <div class="card-header d-flex justify-content-between align-items-center">
@@ -261,24 +265,24 @@ document.addEventListener('DOMContentLoaded', () => {
                             <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#${jsonTabId}" type="button" role="tab">JSON</button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#${evidenceTabId}" type="button" role="tab">Evidence</button>
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#${evidenceTabId}" type="button" role="tab">Confidence & Evidence</button>
                         </li>
                     </ul>
                     <div class="tab-content pt-3">
-                        <div class="tab-pane fade show active" id="${jsonTabId}" role="tabpanel">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <label class="form-label mb-0" for="editor_${key}">JSON Data</label>
+                <div class="tab-pane fade show active" id="${jsonTabId}" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0" for="editor_${safeKey}">JSON Data</label>
                                 <div class="btn-group btn-group-sm" role="group">
                                     <button type="button" class="btn btn-outline-secondary" data-action="format-json" data-submodel="${key}"><i class="fas fa-wand-magic-sparkles"></i> Format</button>
                                     <button type="button" class="btn btn-outline-secondary" data-action="validate-json" data-submodel="${key}"><i class="fas fa-check"></i> Validate</button>
                                     <button type="button" class="btn btn-outline-secondary" data-action="revert-json" data-submodel="${key}"><i class="fas fa-rotate-left"></i> Revert</button>
                                 </div>
                             </div>
-                            <textarea class="form-control font-monospace submodel-json" id="editor_${key}" rows="18" data-submodel="${key}">${JSON.stringify(payload.data, null, 2)}</textarea>
+                    <textarea class="form-control font-monospace submodel-json" id="editor_${safeKey}" rows="18" data-submodel="${key}">${JSON.stringify(payload.data, null, 2)}</textarea>
                             <div class="form-text">Edit and format JSON; invalid JSON will be highlighted on validation.</div>
                         </div>
-                        <div class="tab-pane fade" id="${evidenceTabId}" role="tabpanel">
-                            <div class="row" id="evidence_${key}"></div>
+                    <div class="tab-pane fade" id="${evidenceTabId}" role="tabpanel">
+                        <div class="row" id="evidence_${safeKey}"></div>
                         </div>
                     </div>
                 </div>
@@ -292,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
         submodelEditors.querySelectorAll('[data-action="download-json"]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const submodel = btn.dataset.submodel;
-                const editor = document.getElementById(`editor_${submodel}`);
+                const editor = getEditorElement(submodel);
                 if (!editor) return;
                 const blob = new Blob([editor.value], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
@@ -340,7 +344,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function formatJsonForKey(key) {
-        const editor = document.getElementById(`editor_${key}`);
+        const editor = getEditorElement(key);
         if (!editor) return;
         try {
             const parsed = JSON.parse(editor.value);
@@ -352,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function validateJsonForKey(key, opts = {}) {
-        const editor = document.getElementById(`editor_${key}`);
+        const editor = getEditorElement(key);
         if (!editor) return false;
         try {
             JSON.parse(editor.value);
@@ -369,7 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function revertJsonForKey(key) {
-        const editor = document.getElementById(`editor_${key}`);
+        const editor = getEditorElement(key);
         if (!editor || !extractedData[key] || !extractedData[key].originalData) return;
         editor.value = JSON.stringify(extractedData[key].originalData, null, 2);
         extractedData[key].data = JSON.parse(JSON.stringify(extractedData[key].originalData));
@@ -378,21 +382,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderEvidenceTabs(submodelKey, metadata) {
-        const container = document.getElementById(`evidence_${submodelKey}`);
+        const container = document.getElementById(`evidence_${getDomSafeId(submodelKey)}`);
         if (!container) return;
 
-        const categories = categorizeMetadata(metadata);
-        container.innerHTML = `
-            ${renderEvidenceColumn(submodelKey, 'Needs Review', 'review', categories.review)}
-            ${renderEvidenceColumn(submodelKey, 'User Defined', 'user', categories.user)}
-            ${renderEvidenceColumn(submodelKey, 'Completed', 'completed', categories.completed)}
-        `;
+        // Some backends return metadata as dict keyed by field; convert to arrays and cap size.
+        const categories = categorizeMetadata(metadata || {});
+        const totalEntries = categories.review.length + categories.user.length + categories.completed.length;
+        if (totalEntries === 0) {
+            container.innerHTML = `<div class="alert alert-info mb-0">No confidence/evidence metadata returned for this submodel.</div>`;
+            return;
+        }
+        container.innerHTML = renderEvidenceTabsHtml(submodelKey, categories);
 
-        // Wire save/revert buttons
+        // Debug console traces to diagnose rendering issues
+        console.debug("[AASX] Rendering Evidence tabs", {
+            submodel: submodelKey,
+            reviewCount: categories.review.length,
+            userCount: categories.user.length,
+            completedCount: categories.completed.length,
+            rawMetadataKeys: Object.keys(metadata || {})
+        });
+
+        // Wire save/revert buttons inside accordion panes
         container.querySelectorAll('[data-action="save"]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const { submodel, category, index } = btn.dataset;
-                const textarea = document.getElementById(`edit_${submodel}_${category}_${index}`);
+                const textarea = document.getElementById(`edit_${getDomSafeId(submodel)}_${category}_${index}`);
                 if (!textarea) return;
                 handleFieldSave(submodel, category, Number(index), textarea.value);
             });
@@ -406,28 +421,45 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function renderEvidenceColumn(submodelKey, title, categoryKey, entries) {
-        const pillClass = categoryKey === 'completed'
-            ? 'badge bg-success'
-            : categoryKey === 'user'
-                ? 'badge bg-primary'
-                : 'badge bg-warning text-dark';
+    function renderEvidenceTabsHtml(submodelKey, categories) {
+        const safeKey = getDomSafeId(submodelKey);
+        const tabMap = [
+            { key: 'review', title: '⚠️ Needs Review', badge: 'bg-warning text-dark' },
+            { key: 'user', title: '✍️ User Defined', badge: 'bg-primary' },
+            { key: 'completed', title: '✅ Completed', badge: 'bg-success' },
+        ];
 
+        const tabHeaders = tabMap.map((tab, idx) => `
+            <li class="nav-item" role="presentation">
+                <button class="nav-link ${idx === 0 ? 'active' : ''}" data-bs-toggle="tab" data-bs-target="#evtab_${safeKey}_${tab.key}" type="button" role="tab">
+                    ${tab.title} <span class="badge ${tab.badge} ms-1">${categories[tab.key].length}</span>
+                </button>
+            </li>
+        `).join('');
+
+        const tabBodies = tabMap.map((tab, idx) => `
+            <div class="tab-pane fade ${idx === 0 ? 'show active' : ''}" id="evtab_${safeKey}_${tab.key}" role="tabpanel">
+                ${renderEvidenceAccordionList(submodelKey, tab.key, categories[tab.key])}
+            </div>
+        `).join('');
+
+        return `
+            <ul class="nav nav-tabs" role="tablist">
+                ${tabHeaders}
+            </ul>
+            <div class="tab-content pt-3">
+                ${tabBodies}
+            </div>
+        `;
+    }
+
+    function renderEvidenceAccordionList(submodelKey, categoryKey, entries) {
+        const safeKey = getDomSafeId(submodelKey);
         if (!entries || entries.length === 0) {
-            return `
-                <div class="col-md-4 mb-3">
-                    <div class="evidence-card card h-100">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <span>${title}</span>
-                            <span class="${pillClass}">0</span>
-                        </div>
-                        <div class="card-body text-muted small">No fields in this category.</div>
-                    </div>
-                </div>
-            `;
+            return `<div class="text-muted small">No fields in this category.</div>`;
         }
 
-        const itemsHtml = entries.map(([path, info], idx) => {
+        return entries.map(([path, info], idx) => {
             const confidence = info.confidence !== undefined && info.confidence !== null
                 ? Number(info.confidence).toFixed(2)
                 : 'N/A';
@@ -437,31 +469,49 @@ document.addEventListener('DOMContentLoaded', () => {
             const valuePreview = info.value !== undefined && info.value !== null
                 ? `<pre class="small bg-light p-2 rounded">${JSON.stringify(info.value, null, 2)}</pre>`
                 : '<div class="text-muted small">No value extracted.</div>';
+            const badge = info.is_edited ? 'badge bg-primary' : (categoryKey === 'completed' ? 'badge bg-success' : 'badge bg-warning text-dark');
+            const status = info.is_edited ? 'User edited' : (categoryKey === 'completed' ? 'High confidence' : 'Needs review');
 
             return `
-                <div class="accordion accordion-flush" id="acc_${submodelKey}_${categoryKey}_${idx}">
+                <div class="accordion accordion-flush mb-2" id="acc_${safeKey}_${categoryKey}_${idx}">
                     <div class="accordion-item">
                         <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse_${submodelKey}_${categoryKey}_${idx}">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse_${safeKey}_${categoryKey}_${idx}">
                                 <div class="d-flex flex-column w-100">
-                                    <div class="d-flex justify-content-between">
+                                    <div class="d-flex justify-content-between align-items-center">
                                         <span><code>${path}</code></span>
-                                        <span class="badge bg-secondary ms-2">conf: ${confidence}</span>
+                                        <span class="${badge} ms-2">${status}</span>
                                     </div>
-                                    <small class="text-muted">${info.is_edited ? 'User edited' : 'Extracted'}</small>
+                                    <small class="text-muted">Confidence: ${confidence}</small>
                                 </div>
                             </button>
                         </h2>
-                        <div id="collapse_${submodelKey}_${categoryKey}_${idx}" class="accordion-collapse collapse">
+                        <div id="collapse_${safeKey}_${categoryKey}_${idx}" class="accordion-collapse collapse">
                             <div class="accordion-body">
-                                <div>${valuePreview}</div>
-                                ${sourcesHtml}
-                                <div class="mt-3">
-                                    <label class="form-label">Edit value (JSON)</label>
-                                    <textarea class="form-control font-monospace" rows="6" id="edit_${submodelKey}_${categoryKey}_${idx}">${JSON.stringify(info.value, null, 2)}</textarea>
-                                    <div class="d-flex gap-2 mt-2">
-                                        <button type="button" class="btn btn-primary btn-sm" data-action="save" data-submodel="${submodelKey}" data-category="${categoryKey}" data-index="${idx}">Save</button>
-                                        <button type="button" class="btn btn-outline-secondary btn-sm" data-action="revert" data-submodel="${submodelKey}" data-category="${categoryKey}" data-index="${idx}">Revert</button>
+                                <ul class="nav nav-tabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#view_${safeKey}_${categoryKey}_${idx}" type="button" role="tab">🔍 View</button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#edit_${safeKey}_${categoryKey}_${idx}_tab" type="button" role="tab">✍️ Edit</button>
+                                    </li>
+                                </ul>
+                                <div class="tab-content pt-2">
+                                    <div class="tab-pane fade show active" id="view_${safeKey}_${categoryKey}_${idx}" role="tabpanel">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <span class="${badge} me-2">${status}</span>
+                                            <span class="badge bg-secondary">conf: ${confidence}</span>
+                                        </div>
+                                        ${valuePreview}
+                                        ${sourcesHtml}
+                                    </div>
+                                    <div class="tab-pane fade" id="edit_${safeKey}_${categoryKey}_${idx}_tab" role="tabpanel">
+                                        <label class="form-label">Edit value (JSON)</label>
+                                        <textarea class="form-control font-monospace" rows="6" id="edit_${safeKey}_${categoryKey}_${idx}">${JSON.stringify(info.value, null, 2)}</textarea>
+                                        <div class="d-flex gap-2 mt-2">
+                                            <button type="button" class="btn btn-primary btn-sm" data-action="save" data-submodel="${submodelKey}" data-category="${categoryKey}" data-index="${idx}">Save</button>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" data-action="revert" data-submodel="${submodelKey}" data-category="${categoryKey}" data-index="${idx}">Revert</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -470,20 +520,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
         }).join('');
-
-        return `
-            <div class="col-md-4 mb-3">
-                <div class="evidence-card card h-100">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>${title}</span>
-                        <span class="${pillClass}">${entries.length}</span>
-                    </div>
-                    <div class="card-body overflow-auto" style="max-height: 420px;">
-                        ${itemsHtml}
-                    </div>
-                </div>
-            </div>
-        `;
     }
 
     function handleFieldSave(submodelKey, category, index, newValueStr) {
@@ -511,7 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update JSON payload
         const updated = applyFieldUpdate(submodel.data, path, parsedValue, targetKey);
         if (updated) {
-            const editor = document.getElementById(`editor_${submodelKey}`);
+            const editor = getEditorElement(submodelKey);
             if (editor) {
                 editor.value = JSON.stringify(submodel.data, null, 2);
             }
@@ -537,7 +573,7 @@ document.addEventListener('DOMContentLoaded', () => {
         meta.is_edited = false;
 
         applyFieldUpdate(submodel.data, path, meta.original_value, targetKey);
-        const editor = document.getElementById(`editor_${submodelKey}`);
+        const editor = getEditorElement(submodelKey);
         if (editor) {
             editor.value = JSON.stringify(submodel.data, null, 2);
         }

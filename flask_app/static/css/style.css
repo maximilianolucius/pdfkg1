@@ -203,6 +203,18 @@ main {
     min-height: 320px;
 }
 
+.evidence-card .badge {
+    font-size: 0.75rem;
+}
+
+.evidence-card pre {
+    white-space: pre-wrap;
+}
+
+.nav-tabs .nav-link {
+    white-space: nowrap;
+}
+
 pre {
     white-space: pre-wrap;
 }

@@ -4,6 +4,7 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from flask import Blueprint, request, jsonify, current_app, send_file
 from werkzeug.utils import secure_filename
 
@@ -25,6 +26,119 @@ api_bp = Blueprint('api', __name__)
 def allowed_file(filename):
     """Check if file is allowed PDF."""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
+
+
+def _collect_template_elements(template_data: dict) -> dict:
+    """
+    Build lookup for template elements by idShort so we can map metadata entries
+    to the correct target key (value vs. description).
+    """
+    elements = {}
+
+    def collect(elements_list):
+        if not isinstance(elements_list, list):
+            return
+        for element in elements_list:
+            if not isinstance(element, dict):
+                continue
+            id_short = element.get('idShort')
+            if id_short:
+                elements[id_short] = element
+            model_type = element.get('modelType')
+            if model_type in ("SubmodelElementCollection", "SubmodelElementList"):
+                collect(element.get('value'))
+
+    if isinstance(template_data, dict):
+        if isinstance(template_data.get('submodelElements'), list):
+            collect(template_data['submodelElements'])
+        elif isinstance(template_data.get('submodels'), list):
+            for submodel in template_data['submodels']:
+                if isinstance(submodel, dict) and isinstance(submodel.get('submodelElements'), list):
+                    collect(submodel['submodelElements'])
+
+    return elements
+
+
+def _find_element_by_id_short(payload: Any, target_id: str):
+    """Recursively search an AAS payload for an element with the matching idShort."""
+    if isinstance(payload, dict):
+        if payload.get('idShort') == target_id:
+            return payload
+        for value in payload.values():
+            found = _find_element_by_id_short(value, target_id)
+            if found:
+                return found
+    elif isinstance(payload, list):
+        for item in payload:
+            found = _find_element_by_id_short(item, target_id)
+            if found:
+                return found
+    return None
+
+
+def _extract_value_from_data(data: dict, id_short: str, target_key: str):
+    """Return the value for a given idShort/key pair from extracted submodel data."""
+    element = _find_element_by_id_short(data, id_short)
+    if not element:
+        return None
+    return element.get(target_key)
+
+
+def _enrich_metadata(submodel_key: str, metadata: dict, submodel_data: dict) -> dict:
+    """
+    Mirror Gradio's enrichment so the UI can offer Needs Review/User Defined/Completed tabs.
+    """
+    if not metadata:
+        metadata = {}
+
+    try:
+        template = get_template(submodel_key)
+        template_data = json.loads(template.default_text)
+    except Exception:
+        template_data = {}
+
+    template_elements = _collect_template_elements(template_data)
+    enriched = {}
+
+    for field_path, raw_info in metadata.items():
+        if not isinstance(raw_info, dict):
+            enriched[field_path] = raw_info
+            continue
+        field_info = dict(raw_info)
+        field_info['is_edited'] = False
+        field_info['original_value'] = field_info.get('value')
+
+        template_element = template_elements.get(field_path)
+        target_key = 'value'
+        if template_element and 'value' not in template_element and 'description' in template_element:
+            target_key = 'description'
+            if field_info.get('value') is None and field_info.get('description') is not None:
+                # Some templates only expose description fields, so fall back to that content.
+                field_info['value'] = field_info.get('description')
+                field_info['original_value'] = field_info.get('description')
+
+        field_info['target_key'] = target_key
+        enriched[field_path] = field_info
+
+    # Ensure every template element has at least a stub entry so the UI can render
+    for id_short, template_element in template_elements.items():
+        if id_short in enriched:
+            continue
+        target_key = 'value'
+        if 'value' not in template_element and 'description' in template_element:
+            target_key = 'description'
+        fallback_value = _extract_value_from_data(submodel_data or {}, id_short, target_key)
+        enriched[id_short] = {
+            'value': fallback_value,
+            'original_value': fallback_value,
+            'is_edited': False,
+            'confidence': 0.0,
+            'sources': [],
+            'notes': 'No extraction metadata available; value populated from template.',
+            'target_key': target_key
+        }
+
+    return enriched
 
 
 @api_bp.route('/pdfs', methods=['GET'])
@@ -284,9 +398,11 @@ def extract_submodels_api():
             template = get_template(key)
             result = extracted.get(key)
             if result:
+                submodel_data = result.get('data', template.schema)
+                enriched_metadata = _enrich_metadata(key, result.get('metadata', {}), submodel_data)
                 results[key] = {
-                    'data': result.get('data', template.schema),
-                    'metadata': result.get('metadata', {})
+                    'data': submodel_data,
+                    'metadata': enriched_metadata
                 }
             else:
                 results[key] = {
